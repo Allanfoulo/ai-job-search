@@ -1,0 +1,4 @@
+
+.env.local
+.owner-setup-code.local
+.worker-shared-secret.local

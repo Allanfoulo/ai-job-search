@@ -1,0 +1,31 @@
+{
+  "name": "northstar-application-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "start:worker": "node --experimental-strip-types src/hosted-worker.ts",
+    "dev:hosted": "vite --config vite.hosted.config.ts",
+    "build:hosted": "vite build --config vite.hosted.config.ts",
+    "convex:dev": "node scripts/build-hosted-prompts.mjs && convex dev",
+    "convex:deploy": "node scripts/build-hosted-prompts.mjs && convex deploy"
+  },
+  "dependencies": {
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.96",
+    "@takumi-rs/helpers": "^2.17.1",
+    "convex": "^1.47.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "takumi-pdf": "^0.18.1",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7"
+  }
+}
