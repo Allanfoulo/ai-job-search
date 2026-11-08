@@ -6,6 +6,10 @@
 [build.environment]
   NODE_VERSION = "22"
 
+[context.production.environment]
+  VITE_CONVEX_URL = "https://deafening-dinosaur-609.eu-west-1.convex.cloud"
+  VITE_CONVEX_SITE_URL = "https://deafening-dinosaur-609.eu-west-1.convex.site"
+
 [context.branch-deploy.environment]
   VITE_CONVEX_URL = "https://deafening-dinosaur-609.eu-west-1.convex.cloud"
   VITE_CONVEX_SITE_URL = "https://deafening-dinosaur-609.eu-west-1.convex.site"
