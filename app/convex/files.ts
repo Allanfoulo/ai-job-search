@@ -89,9 +89,12 @@ export const metadataForDownload = internalQuery({
 
 export const privateDownload = httpAction(async (ctx, request) => {
   const origin = request.headers.get("origin") ?? "";
-  const allowedOrigin = process.env.APP_ORIGIN ?? "";
+  const allowedOrigins = (process.env.APP_ORIGINS ?? process.env.APP_ORIGIN ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
   const corsHeaders: Record<string, string> = {
-    "Access-Control-Allow-Origin": allowedOrigin && origin === allowedOrigin ? origin : "null",
+    "Access-Control-Allow-Origin": allowedOrigins.includes(origin) ? origin : "null",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Vary": "Origin",

@@ -15,7 +15,7 @@ The hosted client uses Convex Auth directly; no Clerk or other identity-provider
 
 - `APP_OWNER_EMAIL`: your sign-in email. This email can create the initial account with the owner setup code and is the only account allowed to invite collaborators.
 - `APP_OWNER_SETUP_CODE`: a unique random code used only for the initial owner account creation. Keep it private and rotate it after the owner account has been created.
-- `APP_ORIGIN`: `http://127.0.0.1:4174` for local hosted-app development.
+- `APP_ORIGINS`: comma-separated exact origins allowed to download private files, such as `http://127.0.0.1:4174,https://northstar-apply.netlify.app`. The single-origin `APP_ORIGIN` remains supported as a fallback.
 - `OLLAMA_API_KEY`: the Ollama Cloud secret used by the hosted generation actions.
 - `APP_WORKER_URL`: the HTTPS origin of the private application worker.
 - `APP_WORKER_SECRET`: a random shared secret used to authenticate Convex-to-worker requests.
@@ -50,7 +50,7 @@ Run the local hosted frontend with `pnpm dev:hosted`. The repository-based app c
 
 ## 3. Production deployment
 
-1. Create a separate Convex production deployment and configure the same environment values there. Set `APP_ORIGIN` to the exact production frontend origin and `APP_WORKER_URL` to the deployed private worker's HTTPS origin. Set a unique production `APP_OWNER_SETUP_CODE` and rotate it after the owner account is created.
+1. Create a separate Convex production deployment and configure the same environment values there. Set `APP_ORIGINS` to the exact production frontend origin and `APP_WORKER_URL` to the deployed worker's HTTPS origin. Set a unique production `APP_OWNER_SETUP_CODE` and rotate it after the owner account is created.
 2. Configure production signing keys for Convex Auth by running `pnpm exec auth --prod --web-server-url <production-frontend-origin>` and following the prompts. Set the production `APP_OWNER_EMAIL` before the first owner sign-up.
 3. Run `pnpm convex:deploy` from `app`.
 4. Build the frontend with `pnpm build:hosted` and host `app/dist-hosted` as a static single-page app. Configure the host's SPA fallback to `index.html` and set `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL` at build time.
@@ -62,7 +62,7 @@ The repository-root `netlify.toml` configures Netlify to build the hosted React 
 
 The current working branch is `features/UI-design-one`; it must be pushed to `origin` before Netlify can deploy it. Keep the repository's default branch (`master`) as Netlify's production branch and enable a branch deploy for `features/UI-design-one`. Netlify will give the feature branch its own preview URL, which can update on each push. This does not merge the feature into `master`; merge when the app is finalized.
 
-After Netlify creates `northstar-apply.netlify.app`, set the Convex development deployment's `APP_ORIGIN` to `https://northstar-apply.netlify.app` to enable private-file downloads there. The current local origin is also used by this development deployment, so local private-file downloads may need the origin switched back while working locally. Before final production, create a separate Convex production deployment, set Netlify production build variables to its `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL`, and set production `APP_ORIGIN` and `SITE_URL` to the final site origin. Production `APP_WORKER_URL` must point to a persistent HTTPS worker deployment; the temporary Cloudflare Quick Tunnel used locally is not suitable for production. Keep `APP_WORKER_SECRET` on Convex and the worker host; do not add it or `OLLAMA_API_KEY` to Netlify frontend variables.
+After Netlify creates `northstar-apply.netlify.app`, include `https://northstar-apply.netlify.app` in the Convex development deployment's `APP_ORIGINS` to enable private-file downloads there. This allowlist can include local development and the current Cloudflare tunnel at the same time; update the tunnel entry if its temporary hostname changes. Before final production, create a separate Convex production deployment, set Netlify production build variables to its `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL`, and set production `APP_ORIGINS` and `SITE_URL` to the final site origin. Production `APP_WORKER_URL` must point to a persistent HTTPS worker deployment; the temporary Cloudflare Quick Tunnel used locally is not suitable for production. Keep `APP_WORKER_SECRET` on Convex and the worker host; do not add it or `OLLAMA_API_KEY` to Netlify frontend variables.
 
 No Convex deployment credentials are committed to the repository. The repository does not contain service account credentials, so creating cloud services and deploying them must be completed from an account where you are signed in.
 
