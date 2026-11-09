@@ -1,11 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-async function owner(ctx: { auth: { getUserIdentity(): Promise<{ subject: string } | null> } }) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Sign in to access this workspace.");
-  return identity.subject;
-}
+import { requireWorkspaceOwner } from "./shared/ownership";
 
 const fields = {
   date: v.string(), company: v.string(), sector: v.string(), role: v.string(), role_type: v.string(),
@@ -16,7 +11,7 @@ const fields = {
 export const listMine = query({
   args: {},
   handler: async (ctx) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     return await ctx.db.query("applications").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).order("desc").collect();
   },
 });
@@ -24,7 +19,7 @@ export const listMine = query({
 export const createMine = mutation({
   args: fields,
   handler: async (ctx, row) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     const company = row.company.trim();
     const role = row.role.trim();
     if (!company || !role) throw new Error("Company and role are required.");
@@ -39,7 +34,7 @@ export const createMine = mutation({
 export const updateStatus = mutation({
   args: { applicationId: v.id("applications"), status: v.string(), note: v.optional(v.string()) },
   handler: async (ctx, { applicationId, status, note }) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     const row = await ctx.db.get(applicationId);
     if (!row || row.ownerId !== ownerId) throw new Error("Application not found.");
     const statuses = new Set(["drafted", "applied", "interview", "offer", "hired", "rejected", "no_response", "offer_declined", "withdrawn"]);

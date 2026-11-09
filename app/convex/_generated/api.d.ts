@@ -18,8 +18,10 @@ import type * as invitedPassword from "../invitedPassword.js";
 import type * as preferences from "../preferences.js";
 import type * as profiles from "../profiles.js";
 import type * as shared_document_builders from "../shared/document_builders.js";
+import type * as shared_ownership from "../shared/ownership.js";
 import type * as users from "../users.js";
 import type * as workflows from "../workflows.js";
+import type * as workspaceMigration from "../workspaceMigration.js";
 
 import type {
   ApiFromModules,
@@ -38,8 +40,10 @@ declare const fullApi: ApiFromModules<{
   preferences: typeof preferences;
   profiles: typeof profiles;
   "shared/document_builders": typeof shared_document_builders;
+  "shared/ownership": typeof shared_ownership;
   users: typeof users;
   workflows: typeof workflows;
+  workspaceMigration: typeof workspaceMigration;
 }>;
 
 /**

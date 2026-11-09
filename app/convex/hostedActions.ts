@@ -4,6 +4,7 @@ import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import crypto from "node:crypto";
+import { requireWorkspaceOwner } from "./shared/ownership";
 import { buildCoverLetterTex, buildCvTex, confirmedContactFromProfile, validateApplicationDocuments } from "./shared/document_builders";
 import { coverLetterTemplate, cvTemplate, draftingRules, evaluationRules } from "./prompts.generated";
 
@@ -69,9 +70,7 @@ async function workerRequest(path: string, payload: unknown) {
 }
 
 async function requireOwner(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Sign in to access this workspace.");
-  return identity.subject as string;
+  return await requireWorkspaceOwner(ctx);
 }
 
 export const testConnection = action({

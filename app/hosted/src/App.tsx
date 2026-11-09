@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -44,8 +44,31 @@ function AuthScreen() {
 function Workspace() {
   const user = useQuery(api.users.current, {}) as { name: string; email: string } | null | undefined;
   const { signOut } = useAuthActions();
+  const ensureWorkspace = useAction(api.workspaceMigration.ensureMine);
   const [view, setView] = useState<ViewName>("overview");
   const [notice, setNotice] = useState("");
+  const [migration, setMigration] = useState<"loading" | "ready" | "error">("loading");
+  const [migrationError, setMigrationError] = useState("");
+  const [migrationAttempt, setMigrationAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        while (active) {
+          const result = await ensureWorkspace({});
+          if (result.complete) break;
+        }
+        if (active) setMigration("ready");
+      } catch (error) {
+        if (!active) return;
+        setMigrationError(error instanceof Error ? error.message : "Workspace recovery failed.");
+        setMigration("error");
+      }
+    })();
+    return () => { active = false; };
+  }, [ensureWorkspace, migrationAttempt]);
+  if (migration === "loading") return <div className="auth-loading"><span className="spinner" />Restoring your private workspace…</div>;
+  if (migration === "error") return <main className="auth-screen"><section className="auth-card"><h1>Workspace recovery paused.</h1><p>Your saved workspace has not been changed in the browser yet. Retry the account data recovery to continue.</p><div className="notice danger compact">{migrationError}</div><button className="button button-primary full-width" onClick={() => { setMigrationError(""); setMigration("loading"); setMigrationAttempt((value) => value + 1); }}>Retry recovery</button><button className="link-button auth-switch" onClick={() => void signOut()}>Sign out</button></section></main>;
   return <>
       <div className="app-shell">
         <aside className="sidebar">

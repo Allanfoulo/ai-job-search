@@ -2,17 +2,13 @@ import { internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { httpActionGeneric as httpAction } from "convex/server";
 import { v } from "convex/values";
-
-async function owner(ctx: { auth: { getUserIdentity(): Promise<{ subject: string } | null> } }) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Sign in to access this workspace.");
-  return identity.subject;
-}
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireWorkspaceOwner } from "./shared/ownership";
 
 export const uploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await owner(ctx);
+    await requireWorkspaceOwner(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -27,7 +23,7 @@ export const attach = mutation({
     byteLength: v.number(),
   },
   handler: async (ctx, data) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     const application = await ctx.db.get(data.applicationId);
     if (!application || application.ownerId !== ownerId) throw new Error("Application not found.");
     const fileName = data.fileName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").trim().slice(0, 180);
@@ -60,7 +56,7 @@ export const attach = mutation({
 export const listMine = query({
   args: { applicationId: v.id("applications") },
   handler: async (ctx, { applicationId }) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     const application = await ctx.db.get(applicationId);
     if (!application || application.ownerId !== ownerId) throw new Error("Application not found.");
     return await ctx.db.query("applicationFiles").withIndex("by_application", (q) => q.eq("applicationId", applicationId)).collect();
@@ -84,13 +80,13 @@ export const privateDownload = httpAction(async (ctx, request) => {
     "Cache-Control": "private, no-store",
   };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) return new Response("Sign in required.", { status: 401, headers: corsHeaders });
+  const ownerId = await getAuthUserId(ctx);
+  if (!ownerId) return new Response("Sign in required.", { status: 401, headers: corsHeaders });
   const fileId = new URL(request.url).pathname.split("/").at(-1);
   if (!fileId) return new Response("File not found.", { status: 404, headers: corsHeaders });
   try {
     const file = await ctx.runQuery(internal.files.metadataForDownload, { fileId: fileId as never });
-    if (!file || file.ownerId !== identity.subject) return new Response("File not found.", { status: 404, headers: corsHeaders });
+    if (!file || file.ownerId !== ownerId) return new Response("File not found.", { status: 404, headers: corsHeaders });
     const blob = await ctx.storage.get(file.storageId);
     if (!blob) return new Response("File not found.", { status: 404, headers: corsHeaders });
     const safeName = file.fileName.replace(/["\\\r\n]/g, "_");
@@ -110,7 +106,7 @@ export const privateDownload = httpAction(async (ctx, request) => {
 export const removeMine = mutation({
   args: { fileId: v.id("applicationFiles") },
   handler: async (ctx, { fileId }) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     const file = await ctx.db.get(fileId);
     if (!file || file.ownerId !== ownerId) throw new Error("File not found.");
     await ctx.storage.delete(file.storageId);

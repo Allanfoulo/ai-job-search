@@ -1,16 +1,11 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-async function owner(ctx: { auth: { getUserIdentity(): Promise<{ subject: string } | null> } }) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Sign in to access this workspace.");
-  return identity.subject;
-}
+import { requireWorkspaceOwner } from "./shared/ownership";
 
 export const getMine = query({
   args: { applicationId: v.id("applications") },
   handler: async (ctx, { applicationId }) => {
-    const ownerId = await owner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     const application = await ctx.db.get(applicationId);
     if (!application || application.ownerId !== ownerId) throw new Error("Application not found.");
     return await ctx.db.query("applicationWorkflows").withIndex("by_owner_application", (q: any) => q.eq("ownerId", ownerId).eq("applicationId", applicationId)).unique();

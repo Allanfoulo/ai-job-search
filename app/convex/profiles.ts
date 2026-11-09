@@ -1,16 +1,11 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-async function currentOwner(ctx: { auth: { getUserIdentity(): Promise<{ subject: string } | null> } }) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Sign in to access this workspace.");
-  return identity.subject;
-}
+import { requireWorkspaceOwner } from "./shared/ownership";
 
 export const getMine = query({
   args: {},
   handler: async (ctx) => {
-    const ownerId = await currentOwner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     return await ctx.db.query("profiles").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).unique();
   },
 });
@@ -18,7 +13,7 @@ export const getMine = query({
 export const saveMine = mutation({
   args: { markdown: v.string(), expectedRevision: v.number() },
   handler: async (ctx, { markdown, expectedRevision }) => {
-    const ownerId = await currentOwner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     if (markdown.length > 120_000) throw new Error("Profile is too large to save (120,000 character limit).");
     const existing = await ctx.db.query("profiles").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).unique();
     const revision = existing?.revision ?? 0;
@@ -46,7 +41,7 @@ export const importMine = mutation({
     })),
   },
   handler: async (ctx, { markdown, expectedRevision, applications }) => {
-    const ownerId = await currentOwner(ctx);
+    const ownerId = await requireWorkspaceOwner(ctx);
     if (markdown.length > 120_000) throw new Error("Profile is too large to import.");
     if (applications.length > 500) throw new Error("An import can contain at most 500 application records.");
     const profile = await ctx.db.query("profiles").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).unique();
