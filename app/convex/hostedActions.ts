@@ -91,8 +91,16 @@ export const preparePosting = action({
     const existing = await ctx.runQuery(internal.workflows.getForAction, { ownerId, applicationId: args.applicationId });
     if (!existing.application) throw new Error("Application not found.");
     const result = await workerRequest("/posting/prepare", { mode: args.mode, content: args.content });
-    await ctx.runMutation(internal.workflows.savePrepared, { ownerId, applicationId: args.applicationId, ...result });
-    return result;
+    const postingText = String(result.postingText ?? result.posting ?? "");
+    await ctx.runMutation(internal.workflows.savePrepared, {
+      ownerId,
+      applicationId: args.applicationId,
+      postingText,
+      sourceUrl: String(result.sourceUrl ?? ""),
+      guard: result.guard ?? {},
+      linkedSources: Array.isArray(result.linkedSources) ? result.linkedSources : [],
+    });
+    return { ...result, postingText };
   },
 });
 
