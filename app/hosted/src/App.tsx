@@ -47,6 +47,8 @@ function Workspace() {
   const ensureWorkspace = useAction(api.workspaceMigration.ensureMine);
   const [view, setView] = useState<ViewName>("overview");
   const [notice, setNotice] = useState("");
+  const [retryApplicationId, setRetryApplicationId] = useState<Id<"applications"> | null>(null);
+  const [filesApplicationId, setFilesApplicationId] = useState<Id<"applications"> | null>(null);
   const [migration, setMigration] = useState<"loading" | "ready" | "error">("loading");
   const [migrationError, setMigrationError] = useState("");
   const [migrationAttempt, setMigrationAttempt] = useState(0);
@@ -67,6 +69,10 @@ function Workspace() {
     })();
     return () => { active = false; };
   }, [ensureWorkspace, migrationAttempt]);
+  const navigate = (nextView: ViewName) => {
+    if (nextView !== "new") setRetryApplicationId(null);
+    setView(nextView);
+  };
   if (migration === "loading") return <div className="auth-loading"><span className="spinner" />Restoring your private workspace…</div>;
   if (migration === "error") return <main className="auth-screen"><section className="auth-card"><h1>Workspace recovery paused.</h1><p>Your saved workspace has not been changed in the browser yet. Retry the account data recovery to continue.</p><div className="notice danger compact">{migrationError}</div><button className="button button-primary full-width" onClick={() => { setMigrationError(""); setMigration("loading"); setMigrationAttempt((value) => value + 1); }}>Retry recovery</button><button className="link-button auth-switch" onClick={() => void signOut()}>Sign out</button></section></main>;
   return <>
@@ -75,10 +81,10 @@ function Workspace() {
           <a className="brand" href="#overview"><span className="brand-mark">N</span><span><strong>Northstar</strong><small>APPLICATION WORKSPACE</small></span></a>
           <div className="workspace-label">YOUR WORKSPACE</div>
           <nav className="main-nav" aria-label="Main navigation">
-            <NavButton view="overview" active={view} onClick={setView} icon="overview">Overview</NavButton>
-            <NavButton view="applications" active={view} onClick={setView} icon="applications">Applications</NavButton>
-            <NavButton view="profile" active={view} onClick={setView} icon="profile">Candidate profile</NavButton>
-            <NavButton view="settings" active={view} onClick={setView} icon="settings">Settings</NavButton>
+            <NavButton view="overview" active={view} onClick={navigate} icon="overview">Overview</NavButton>
+            <NavButton view="applications" active={view} onClick={navigate} icon="applications">Applications</NavButton>
+            <NavButton view="profile" active={view} onClick={navigate} icon="profile">Candidate profile</NavButton>
+            <NavButton view="settings" active={view} onClick={navigate} icon="settings">Settings</NavButton>
           </nav>
           <div className="sidebar-bottom">
             <div className="help-card"><strong>A little more focused.</strong><p>Your workspace is private to your account.</p></div>
@@ -87,7 +93,7 @@ function Workspace() {
         </aside>
         <main className="main-area">
           <header className="topbar"><div className="breadcrumbs"><span>Workspace</span><span className="crumb-sep">/</span><strong>{view === "profile" ? "Candidate profile" : view[0].toUpperCase() + view.slice(1)}</strong></div><div className="topbar-actions"><span className="cloud-indicator"><i /> Private cloud workspace</span><div className="avatar small">{(user?.name?.[0] || "N").toUpperCase()}</div></div></header>
-          <section className="view" aria-live="polite">{view === "overview" ? <Overview setView={setView} /> : view === "applications" ? <Applications notice={setNotice} setView={setView} /> : view === "profile" ? <Profile notice={setNotice} /> : view === "settings" ? <Settings notice={setNotice} /> : <NewApplication notice={setNotice} setView={setView} />}</section>
+          <section className="view" aria-live="polite">{view === "overview" ? <Overview setView={navigate} /> : view === "applications" ? <Applications notice={setNotice} setView={navigate} onRetry={(id) => { setRetryApplicationId(id); setFilesApplicationId(id); navigate("new"); }} initialSelectedId={filesApplicationId} /> : view === "profile" ? <Profile notice={setNotice} /> : view === "settings" ? <Settings notice={setNotice} /> : <NewApplication key={retryApplicationId || "new-application"} notice={setNotice} setView={navigate} initialApplicationId={retryApplicationId} onPackSaved={(id) => setFilesApplicationId(id)} />}</section>
         </main>
       </div>
       <div className={`toast ${notice ? "show" : ""}`} role="status">{notice}</div>
@@ -140,8 +146,9 @@ function ApplicationTable({ rows }: { rows: AppRecord[] }) {
   return <div className="table-wrap"><table className="table"><thead><tr><th>Role</th><th>Status</th><th>Added</th><th>Fit</th><th>Deadline</th></tr></thead><tbody>{rows.map((row) => <tr key={row._id}><td><div className="role-name">{row.role}</div><div className="company-name">{row.company}</div></td><td><span className={`status-pill status-${row.status}`}>{labelStatus(row.status)}</span></td><td>{formatDate(row.date)}</td><td>{row.fit_rating || "—"}</td><td>{formatDate(row.deadline)}</td></tr>)}</tbody></table></div>;
 }
 
-function Applications({ notice, setView }: { notice: (message: string) => void; setView: (view: ViewName) => void }) {
+function Applications({ notice, setView, onRetry, initialSelectedId }: { notice: (message: string) => void; setView: (view: ViewName) => void; onRetry: (id: Id<"applications">) => void; initialSelectedId: Id<"applications"> | null }) {
   const rows = useQuery(api.applications.listMine, {}) as AppRecord[] | undefined;
+  const packStatuses = useQuery(api.files.packStatusMine, {}) as Array<{ applicationId: Id<"applications">; hasCvPdf: boolean; hasCoverLetterPdf: boolean }> | undefined;
   const create = useMutation(api.applications.createMine);
   const updateStatus = useMutation(api.applications.updateStatus);
   const [creating, setCreating] = useState(false);
@@ -164,13 +171,13 @@ function Applications({ notice, setView }: { notice: (message: string) => void; 
   return <>
     <PageHeading title="Applications" description="Track every role from first draft through final outcome." action={<div className="button-row"><button className="button button-primary" onClick={() => setView("new")}>New application pack</button><button className="button button-secondary" onClick={() => setCreating((value) => !value)}>Quick add</button></div>} />
     {creating && <section className="panel form-panel"><div className="panel-header"><div><div className="panel-title">Add a role</div><div className="panel-subtitle">Application documents and AI drafting are in the next migration slice.</div></div><button className="icon-button" onClick={() => setCreating(false)} aria-label="Close"><NavIcon name="close" /></button></div><form className="application-form" onSubmit={submit}><label className="field"><span>Company</span><input name="company" required maxLength={120} placeholder="Company name" /></label><label className="field"><span>Role title</span><input name="role" required maxLength={160} placeholder="Role title" /></label><label className="field"><span>Deadline <small>(optional)</small></span><input name="deadline" type="date" /></label><button className="button button-primary" disabled={saving}>{saving ? "Saving…" : "Save application"}</button></form></section>}
-    <section className="panel"><div className="panel-header"><div><div className="panel-title">All applications</div><div className="panel-subtitle">{rows.length} roles in your private workspace</div></div><input className="input search-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search roles or companies" /></div>{!filtered.length ? <div className="empty-state"><strong>{rows.length ? "No matching roles" : "No applications yet"}</strong><p>{rows.length ? "Try a different search." : "Add a role to start your tracker."}</p></div> : <div className="table-wrap"><table className="table"><thead><tr><th>Role</th><th>Status</th><th>Added</th><th>Fit</th><th>Deadline</th></tr></thead><tbody>{filtered.map((row) => <tr key={row._id}><td><div className="role-name">{row.role}</div><div className="company-name">{row.company}</div></td><td><select aria-label={`Status for ${row.role} at ${row.company}`} className={`status-select status-${row.status}`} value={row.status} onChange={async (event) => { try { await updateStatus({ applicationId: row._id as never, status: event.target.value }); notice("Application status updated."); } catch (error) { notice(error instanceof Error ? error.message : "Could not update status."); } }}>{statusOptions.map((status) => <option key={status} value={status}>{labelStatus(status)}</option>)}</select></td><td>{formatDate(row.date)}</td><td>{row.fit_rating || "—"}</td><td>{formatDate(row.deadline)}</td></tr>)}</tbody></table></div>}</section>
-    {rows.length > 0 && <FileLibrary applications={rows} notice={notice} />}
+    <section className="panel"><div className="panel-header"><div><div className="panel-title">All applications</div><div className="panel-subtitle">{rows.length} roles in your private workspace</div></div><input className="input search-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search roles or companies" /></div>{!filtered.length ? <div className="empty-state"><strong>{rows.length ? "No matching roles" : "No applications yet"}</strong><p>{rows.length ? "Try a different search." : "Add a role to start your tracker."}</p></div> : <div className="table-wrap"><table className="table"><thead><tr><th>Role</th><th>Status</th><th>Added</th><th>Fit</th><th>Deadline</th><th>Pack</th></tr></thead><tbody>{filtered.map((row) => { const pack = packStatuses?.find((item) => item.applicationId === row._id); const missingPdf = pack && (!pack.hasCvPdf || !pack.hasCoverLetterPdf); return <tr key={row._id}><td><div className="role-name">{row.role}</div><div className="company-name">{row.company}</div></td><td><select aria-label={`Status for ${row.role} at ${row.company}`} className={`status-select status-${row.status}`} value={row.status} onChange={async (event) => { try { await updateStatus({ applicationId: row._id as never, status: event.target.value }); notice("Application status updated."); } catch (error) { notice(error instanceof Error ? error.message : "Could not update status."); } }}>{statusOptions.map((status) => <option key={status} value={status}>{labelStatus(status)}</option>)}</select></td><td>{formatDate(row.date)}</td><td>{row.fit_rating || "—"}</td><td>{formatDate(row.deadline)}</td><td>{missingPdf ? <button className="button button-secondary retry-pack-button" onClick={() => onRetry(row._id)}>Retry pack</button> : pack ? <span className="subtle">PDFs ready</span> : <span className="subtle">Checking…</span>}</td></tr>; })}</tbody></table></div>}</section>
+    {rows.length > 0 && <FileLibrary applications={rows} notice={notice} initialSelectedId={initialSelectedId} />}
   </>;
 }
 
-function FileLibrary({ applications, notice }: { applications: AppRecord[]; notice: (message: string) => void }) {
-  const [selectedId, setSelectedId] = useState(applications[0]._id);
+function FileLibrary({ applications, notice, initialSelectedId }: { applications: AppRecord[]; notice: (message: string) => void; initialSelectedId: Id<"applications"> | null }) {
+  const [selectedId, setSelectedId] = useState(initialSelectedId || applications[0]._id);
   const files = useQuery(api.files.listMine, selectedId ? { applicationId: selectedId as never } : "skip") as Array<{ _id: string; fileName: string; contentType: string; byteLength: number }> | undefined;
   const uploadUrl = useMutation(api.files.uploadUrl);
   const attach = useMutation(api.files.attach);
@@ -206,16 +213,16 @@ function redactContacts(value: string) {
   return value.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email redacted]").replace(/(?:\+?\d[\d\s().-]{7,}\d)/g, "[phone number redacted]");
 }
 
-function NewApplication({ notice, setView }: { notice: (message: string) => void; setView: (view: ViewName) => void }) {
+function NewApplication({ notice, setView, initialApplicationId = null, onPackSaved }: { notice: (message: string) => void; setView: (view: ViewName) => void; initialApplicationId?: Id<"applications"> | null; onPackSaved: (id: Id<"applications">) => void }) {
   const applications = useQuery(api.applications.listMine, {}) as AppRecord[] | undefined;
   const create = useMutation(api.applications.createMine);
   const prepare = useAction(api.hostedActions.preparePosting);
   const assessFit = useAction(api.hostedActions.assessFit);
   const generate = useAction(api.hostedActions.generatePack);
-  const profile = useQuery(api.profiles.getMine, {}) as { markdown: string } | null | undefined;
+  const profile = useQuery(api.profiles.getMine, {}) as { markdown: string; revision: number } | null | undefined;
   const [stage, setStage] = useState<"posting" | "review" | "fit" | "draft" | "complete">("posting");
   const [mode, setMode] = useState<"url" | "text">("url");
-  const [applicationId, setApplicationId] = useState<Id<"applications"> | null>(null);
+  const [applicationId, setApplicationId] = useState<Id<"applications"> | null>(initialApplicationId);
   const workflow = useQuery(api.workflows.getMine, applicationId ? { applicationId: applicationId as never } : "skip") as any;
   const [prepared, setPrepared] = useState<any>(null);
   const [fit, setFit] = useState<any>(null);
@@ -226,10 +233,34 @@ function NewApplication({ notice, setView }: { notice: (message: string) => void
   const [postingContent, setPostingContent] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [retryInitialized, setRetryInitialized] = useState(false);
   const profileText = profile?.markdown || "";
   const postingData = prepared || workflow;
   const assessment = fit || workflow?.fitAssessment;
   const allowed = assessment && assessment.proceedAllowed !== false && String(assessment.proceedAllowed ?? assessment.proceed_allowed).toLowerCase() !== "false";
+
+  useEffect(() => {
+    if (!initialApplicationId || retryInitialized || !applications || workflow === undefined || profile === undefined) return;
+    const application = applications.find((row) => row._id === initialApplicationId);
+    if (!application) {
+      setError("This application is no longer available in your workspace.");
+      setRetryInitialized(true);
+      return;
+    }
+    const savedSource = application.source || "";
+    setCompany(application.company);
+    setRole(application.role);
+    setPostingContent(savedSource);
+    setMode(/^https?:\/\//i.test(savedSource) ? "url" : "text");
+    if (workflow?.postingText) {
+      setPrepared(workflow);
+      const hasCurrentFit = Boolean(workflow.fitAssessment) && workflow.fitProfileRevision === (profile?.revision ?? 0);
+      setStage(hasCurrentFit ? "fit" : "review");
+    } else {
+      setStage("posting");
+    }
+    setRetryInitialized(true);
+  }, [initialApplicationId, retryInitialized, applications, workflow, profile]);
 
   async function submitPosting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
@@ -241,7 +272,7 @@ function NewApplication({ notice, setView }: { notice: (message: string) => void
     setCompany(nextCompany); setRole(nextRole);
     try {
       const existing = applications?.find((row) => row.company.toLowerCase() === nextCompany.toLowerCase() && row.role.toLowerCase() === nextRole.toLowerCase());
-      const id = existing?._id || await create({ date: new Date().toISOString().slice(0, 10), company: nextCompany, role: nextRole, sector: "", role_type: "", channel: mode === "url" ? "Job posting URL" : "Pasted posting", status: "drafted", contact_person: "", fit_rating: "", notes: "", cv_file: "", cover_letter_file: "", source: mode === "url" ? content : "", deadline: "" });
+      const id = applicationId || existing?._id || await create({ date: new Date().toISOString().slice(0, 10), company: nextCompany, role: nextRole, sector: "", role_type: "", channel: mode === "url" ? "Job posting URL" : "Pasted posting", status: "drafted", contact_person: "", fit_rating: "", notes: "", cv_file: "", cover_letter_file: "", source: mode === "url" ? content : "", deadline: "" });
       setApplicationId(id); setStage("review");
       const result = await prepare({ applicationId: id, mode, content });
       setPrepared(result); notice("Posting checked and linked sources fetched.");
@@ -258,7 +289,7 @@ function NewApplication({ notice, setView }: { notice: (message: string) => void
   async function createPack() {
     if (!draftConsent || !applicationId) return;
     setBusy(true); setError("");
-    try { const result = await generate({ applicationId: applicationId as never, confirmSend: true }); notice(`Application pack saved · ${result.filenames.length} files created.`); setDraftConsent(false); setStage("complete"); }
+    try { const result = await generate({ applicationId: applicationId as never, confirmSend: true }); notice(`Application pack saved · ${result.filenames.length} files created.`); onPackSaved(applicationId); setDraftConsent(false); setStage("complete"); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Draft generation failed."); }
     finally { setBusy(false); }
   }
@@ -266,7 +297,7 @@ function NewApplication({ notice, setView }: { notice: (message: string) => void
   return <>
     <PageHeading title="Build an application pack" description="Check a posting, review fit, and generate a tailored CV and cover letter." />
     <section className="panel workflow-panel"><div className="steps-row">{["Posting", "Source check", "Fit review", "Draft pack"].map((title, index) => <div className={`workflow-step ${index + 1 <= Math.min(step, 4) ? "active" : ""}`} key={title}><span>{index + 1 < step ? <NavIcon name="check" /> : index + 1}</span>{title}</div>)}</div>
-      {stage === "posting" && <form onSubmit={submitPosting} className="workflow-form"><div><h2>Add the job posting</h2><p className="panel-subtitle">The hosted worker checks public HTTPS links and applies the repository posting guard before any AI call.</p></div><div className="segmented"><button type="button" className={mode === "url" ? "selected" : ""} onClick={() => setMode("url")}>Posting URL</button><button type="button" className={mode === "text" ? "selected" : ""} onClick={() => setMode("text")}>Paste text</button></div><div className="field"><span>Company</span><input className="input" name="company" required maxLength={120} placeholder="Company name" value={company} onChange={(event) => setCompany(event.target.value)} /></div><div className="field"><span>Role title</span><input className="input" name="role" required maxLength={160} placeholder="Role title" value={role} onChange={(event) => setRole(event.target.value)} /></div><div className="field"><span>{mode === "url" ? "Job posting link" : "Job posting text"}</span>{mode === "url" ? <input className="input" name="posting" type="url" required placeholder="https://company.com/careers/role" /> : <textarea className="textarea" name="posting" required maxLength={60000} placeholder="Paste the complete job description" />}</div><div className="notice info"><strong>Public links</strong><span>Visible links found in the posting are fetched automatically, up to 50 links. Only public HTTPS pages are allowed.</span></div>{error && <div className="notice danger compact">{error}</div>}<div className="flow-actions"><button type="button" className="button button-secondary" onClick={() => setView("applications")}>Cancel</button><button className="button button-primary" disabled={busy}>{busy ? "Checking posting and links…" : "Check posting"}</button></div></form>}
+      {stage === "posting" && <form onSubmit={submitPosting} className="workflow-form"><div><h2>{initialApplicationId ? "Resume this application" : "Add the job posting"}</h2><p className="panel-subtitle">The hosted worker checks public HTTPS links and applies the repository posting guard before any AI call.</p></div><div className="segmented"><button type="button" className={mode === "url" ? "selected" : ""} onClick={() => setMode("url")}>Posting URL</button><button type="button" className={mode === "text" ? "selected" : ""} onClick={() => setMode("text")}>Paste text</button></div><div className="field"><span>Company</span><input className="input" name="company" required maxLength={120} placeholder="Company name" readOnly={Boolean(initialApplicationId)} value={company} onChange={(event) => setCompany(event.target.value)} /></div><div className="field"><span>Role title</span><input className="input" name="role" required maxLength={160} placeholder="Role title" readOnly={Boolean(initialApplicationId)} value={role} onChange={(event) => setRole(event.target.value)} /></div><div className="field"><span>{mode === "url" ? "Job posting link" : "Job posting text"}</span>{mode === "url" ? <input className="input" name="posting" type="url" required placeholder="https://company.com/careers/role" value={postingContent} onChange={(event) => setPostingContent(event.target.value)} /> : <textarea className="textarea" name="posting" required maxLength={60000} placeholder="Paste the complete job description" value={postingContent} onChange={(event) => setPostingContent(event.target.value)} />}</div><div className="notice info"><strong>Public links</strong><span>Visible links found in the posting are fetched automatically, up to 50 links. Only public HTTPS pages are allowed.</span></div>{error && <div className="notice danger compact">{error}</div>}<div className="flow-actions"><button type="button" className="button button-secondary" onClick={() => setView("applications")}>Cancel</button><button className="button button-primary" disabled={busy}>{busy ? "Checking posting and links…" : "Check posting"}</button></div></form>}
       {stage === "review" && <div className="workflow-form"><div><h2>Posting checked</h2><p className="panel-subtitle">Review the posting guard findings and linked sources.</p></div>{!postingData ? <>{busy ? <Loading /> : <div className="notice warning">The source check did not finish. {error || "Retry the check when the worker is available."}<button className="button button-secondary" disabled={!applicationId} onClick={async () => { if (!applicationId) return; setBusy(true); setError(""); try { const result = await prepare({ applicationId: applicationId as never, mode, content: postingContent }); setPrepared(result); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not prepare this posting."); } finally { setBusy(false); } }}>Retry source check</button></div>}</> : <><div className="notice info"><strong>{postingData.guard?.verdict || "Guard complete"}</strong><span>{postingData.guard?.instruction_like?.length || 0} instruction-like lines flagged · {postingData.linksFetched ?? postingData.linkedSources?.length ?? 0} visible links fetched</span></div><details className="result-details"><summary>Job posting sent for fit review</summary><pre>{postingData.postingText || postingData.posting}</pre></details>{(postingData.linkedSources || []).length > 0 && <details className="result-details"><summary>Linked sources fetched ({postingData.linkedSources.length})</summary>{postingData.linkedSources.map((source: any) => <div className="linked-source" key={source.url}><strong>{source.url}</strong><pre>{source.text}</pre></div>)}</details>}{(postingData.linkErrors || []).length > 0 && <details className="result-details"><summary>Links that could not be fetched ({postingData.linkErrors.length})</summary>{postingData.linkErrors.map((source: any) => <div className="linked-source" key={source.url}><strong>{source.url}</strong><p>{source.error}</p></div>)}</details>}<details className="result-details"><summary>Redacted candidate profile sent to Ollama Cloud</summary><pre>{redactContacts(profileText)}</pre></details><div className="notice warning"><strong>Ollama Cloud transfer</strong><span>Your redacted profile, posting text, and linked source text will be sent to Ollama Cloud for fit assessment. Phone numbers and email are redacted.</span></div><label className="consent-row"><input type="checkbox" checked={fitConsent} onChange={(event) => setFitConsent(event.target.checked)} /><span>I reviewed the content above and approve this fit assessment request.</span></label>{error && <div className="notice danger compact">{error}</div>}<div className="flow-actions"><button className="button button-secondary" onClick={() => setStage("posting")}>Back</button><button className="button button-primary" disabled={!fitConsent || busy || !profileText.trim()} onClick={runFit}>{busy ? "Assessing fit…" : "Approve and assess fit"}</button></div></>}</div>}
       {stage === "fit" && <div className="workflow-form"><div><h2>Fit review</h2><p className="panel-subtitle">Eligibility and language gates run before the fit score.</p></div>{!assessment ? <Loading /> : <div className="fit-result"><div className="fit-score-large">{assessment.overallScore ?? "—"}<small>{typeof assessment.overallScore === "number" ? " / 100" : ""}</small></div><div className="score-row"><span className="score-chip">Eligibility · {assessment.eligibility?.verdict || "Reviewed"}</span><span className="score-chip">Language · {assessment.languageGate?.verdict || "Reviewed"}</span><span className="score-chip">Recommendation · {assessment.verdict || assessment.recommendation || "Review"}</span></div><p>{assessment.summary || "Review the eligibility and language findings before proceeding."}</p>{assessment.eligibility?.reason && <div className="source-card"><strong>Eligibility</strong><br />{assessment.eligibility.reason}{assessment.eligibility.sourceQuote && <blockquote>“{assessment.eligibility.sourceQuote}”</blockquote>}</div>}{assessment.languageGate?.reason && <div className="source-card"><strong>Language</strong><br />{assessment.languageGate.reason}{assessment.languageGate.sourceQuote && <blockquote>“{assessment.languageGate.sourceQuote}”</blockquote>}</div>}</div>}{!allowed ? <div className="notice danger">A hard eligibility gate did not clear. Pack generation is blocked.</div> : <><details className="result-details"><summary>Redacted profile, posting, links, and fit data to be sent</summary><pre>{JSON.stringify({ profile: redactContacts(profileText), posting: postingData?.postingText || postingData?.posting, linkedSources: postingData?.linkedSources, fitAssessment: assessment }, null, 2)}</pre></details><div className="notice warning"><strong>Draft and review transfer</strong><span>Two Ollama Cloud calls will draft and then review your CV, cover letter, and application answers. Email and phone are redacted. The private PDF worker receives your profile and the reviewed document content to render PDFs that include your confirmed phone numbers and portfolio.</span></div><label className="consent-row"><input type="checkbox" checked={draftConsent} onChange={(event) => setDraftConsent(event.target.checked)} /><span>I approve these Ollama Cloud calls and PDF rendering for this application pack.</span></label></>}{error && <div className="notice danger compact">{error}</div>}<div className="flow-actions"><button className="button button-secondary" onClick={() => setStage("review")}>Back</button><button className="button button-primary" disabled={!allowed || !draftConsent || busy} onClick={createPack}>{busy ? "Drafting and rendering PDFs…" : "Generate and save pack"}</button></div></div>}
       {stage === "complete" && <div className="workflow-form complete-state"><div className="complete-mark"><NavIcon name="check" /></div><div><h2>Application pack saved</h2><p className="panel-subtitle">The tailored CV and cover letter PDFs, editable sources, fit review, posting, and related notes are saved in your private Convex workspace.</p></div><button className="button button-primary" onClick={() => setView("applications")}>Open application files</button></div>}

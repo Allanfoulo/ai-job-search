@@ -63,6 +63,25 @@ export const listMine = query({
   },
 });
 
+export const packStatusMine = query({
+  args: {},
+  handler: async (ctx) => {
+    const ownerId = await requireWorkspaceOwner(ctx);
+    const applications = await ctx.db.query("applications").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect();
+    const files = await ctx.db.query("applicationFiles").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect();
+    const filesByApplication = new Map<string, typeof files>();
+    for (const file of files) filesByApplication.set(file.applicationId, [...(filesByApplication.get(file.applicationId) ?? []), file]);
+    return applications.map((application) => {
+      const roleFiles = filesByApplication.get(application._id) ?? [];
+      return {
+        applicationId: application._id,
+        hasCvPdf: roleFiles.some((file) => file.artifactType === "Tailored CV" && file.contentType === "application/pdf"),
+        hasCoverLetterPdf: roleFiles.some((file) => file.artifactType === "Tailored Cover Letter" && file.contentType === "application/pdf"),
+      };
+    });
+  },
+});
+
 export const metadataForDownload = internalQuery({
   args: { fileId: v.id("applicationFiles") },
   handler: async (ctx, { fileId }) => await ctx.db.get(fileId),
