@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: northstar-application-worker
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: features/UI-design-one
+    dockerfilePath: ./Dockerfile.worker
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_WORKER_SECRET
+        sync: false

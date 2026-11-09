@@ -206,10 +206,11 @@ async function verifyRequest(req: any, body: Buffer) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.method !== "POST" || !["/posting/prepare", "/pdf/render"].includes(new URL(req.url || "/", "http://localhost").pathname)) return json(res, 404, { error: "Not found." });
+    const path = new URL(req.url || "/", "http://localhost").pathname;
+    if (req.method === "GET" && path === "/health") return json(res, 200, { status: "ok" });
+    if (req.method !== "POST" || !["/posting/prepare", "/pdf/render"].includes(path)) return json(res, 404, { error: "Not found." });
     const body = await readBody(req);
     await verifyRequest(req, body);
-    const path = new URL(req.url || "/", "http://localhost").pathname;
     const input = JSON.parse(body.toString("utf8"));
     if (path === "/posting/prepare") return json(res, 200, await preparePosting(input));
     const cv = await renderPdf("cv", input.documents, input.profile);

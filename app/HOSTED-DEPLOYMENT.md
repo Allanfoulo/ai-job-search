@@ -28,7 +28,16 @@ The owner creates collaborator invitations in the hosted app's Settings page. Ea
 
 ## 2. Private application worker
 
-Posting fetch/guard and pdfcn/Takumi rendering run in a dedicated Node worker. Deploy the repository root as a private Node service with Node 22+, Python 3, and either the `pypdf` Python package or Poppler `pdfinfo`/`pdftotext` available. Install the app packages, then use `pnpm --dir app start:worker`. Set `APP_WORKER_SECRET` on the worker to the same random secret configured on Convex. Do not expose this secret in frontend settings or logs. The worker does not read or write the candidate archive; it uses temporary files only for PDF rendering and returns the bytes to Convex Storage.
+Posting fetch/guard and pdfcn/Takumi rendering run in a dedicated Node worker. The repository includes a Render Blueprint for a free Docker web service. The worker image uses a strict Docker build allowlist: it includes the worker, PDF renderer, and required Python helpers, while excluding candidate profiles, uploaded files, generated application documents, local settings, and secrets. The worker does not read or write the candidate archive; it uses temporary files only for PDF rendering and returns the bytes to Convex Storage.
+
+To deploy the worker on Render:
+
+1. Connect this repository to Render and create a Blueprint from `render.yaml`, using the `features/UI-design-one` branch. Render builds `Dockerfile.worker` and checks `GET /health`.
+2. In the new Render service's Environment page, set `APP_WORKER_SECRET` to the same secret already configured on the Convex development deployment. Keep it private and do not put it in the frontend or repository.
+3. After the first deploy succeeds, copy the service's HTTPS `onrender.com` origin into `APP_WORKER_URL` on the Convex **development** deployment. Keep `APP_WORKER_URL` as an origin only, without a path. Do not change the production deployment.
+4. Retry the posting check. The first request after 15 minutes of inactivity can take about a minute while the free service wakes.
+
+Render's free service has 512 MB of memory, no persistent disk, and may restart or sleep. It is suitable for trying the worker, but PDF rendering could exceed its memory limit for larger requests. Application data remains in Convex; the worker's temporary files are disposable.
 
 Convex cloud actions cannot call a loopback URL. While using a cloud development deployment, point `APP_WORKER_URL` to a publicly reachable HTTPS development worker. The worker is HMAC-authenticated and accepts only its two internal action routes.
 
