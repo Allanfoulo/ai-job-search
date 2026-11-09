@@ -2,7 +2,7 @@
 
 **Product kind:** authenticated job application workspace (software)  
 **Design direction:** Guided workflow (Visual Companion option C)  
-**Status:** Design approved; awaiting written spec review before implementation
+**Status:** Design approved; implementation complete
 
 ## Goal
 
