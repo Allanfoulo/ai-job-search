@@ -12,19 +12,41 @@ function redactContacts(value: string) {
   return value.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email redacted]").replace(/(?:\+?\d[\d\s().-]{7,}\d)/g, "[phone number redacted]");
 }
 
+function firstJsonObject(value: string) {
+  const start = value.indexOf("{");
+  if (start < 0) return value;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < value.length; index++) {
+    const char = value[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) return value.slice(start, index + 1);
+  }
+  return value;
+}
+
 function parseModelJson(content: string) {
   const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try { return JSON.parse(cleaned); }
+  const candidate = firstJsonObject(cleaned);
+  try { return JSON.parse(candidate); }
   catch (initialError) {
     let repaired = "", inString = false;
-    for (let i = 0; i < cleaned.length; i++) {
-      const char = cleaned[i];
+    for (let i = 0; i < candidate.length; i++) {
+      const char = candidate[i];
       if (!inString) { repaired += char; if (char === '"') inString = true; continue; }
       if (char === '"') { repaired += char; inString = false; continue; }
       if (char !== "\\") { repaired += char; continue; }
-      const next = cleaned[i + 1];
+      const next = candidate[i + 1];
       if ('"\\/bfnrt'.includes(next || "")) { repaired += char + next; i++; }
-      else if (next === "u" && /^[\da-f]{4}$/i.test(cleaned.slice(i + 2, i + 6))) { repaired += cleaned.slice(i, i + 6); i += 5; }
+      else if (next === "u" && /^[\da-f]{4}$/i.test(candidate.slice(i + 2, i + 6))) { repaired += candidate.slice(i, i + 6); i += 5; }
       else repaired += "\\\\";
     }
     try { return JSON.parse(repaired); } catch { throw initialError; }
